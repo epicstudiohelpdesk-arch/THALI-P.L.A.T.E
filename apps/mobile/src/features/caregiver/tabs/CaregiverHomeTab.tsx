@@ -29,7 +29,7 @@ export function CaregiverHomeTab({
   onOpenPatientSwitcher,
   testID = "caregiver-home-tab",
 }: CaregiverHomeTabProps) {
-  const { activePatient, linkedPatients, isLoading, isError, refreshPatients } =
+  const { activePatient, linkedPatients, isLoading, isError, selectPatient, refreshPatients } =
     useCaregiverContext();
 
   if (isLoading) {
@@ -48,7 +48,7 @@ export function CaregiverHomeTab({
     );
   }
 
-  if (!activePatient || linkedPatients.length === 0) {
+  if (linkedPatients.length === 0) {
     return (
       <View style={styles.stateContainer} testID={testID}>
         <EmptyState
@@ -56,6 +56,53 @@ export function CaregiverHomeTab({
           message="You are not currently authorized to view any patients. A clinic coordinator adds and verifies caregiver relationships."
         />
       </View>
+    );
+  }
+
+  if (!activePatient) {
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.content} testID={testID}>
+        <View style={styles.header}>
+          <Text style={styles.heading} allowFontScaling>
+            {"Choose who you're caring for"}
+          </Text>
+          <Text style={styles.subheading} allowFontScaling>
+            Select an authorized patient to view their records and contribute observations.
+          </Text>
+        </View>
+
+        {linkedPatients.map((patient) => (
+          <AppCard
+            key={patient.patient_id}
+            accessibilityLabel={`Select patient ${patient.name}`}
+            onPress={() => selectPatient(patient.patient_id)}
+          >
+            <View style={styles.patientCardHeader}>
+              <Text style={styles.patientName} allowFontScaling>
+                {patient.name}
+              </Text>
+              {patient.relationship_label ? (
+                <Badge label={patient.relationship_label} tone="neutral" />
+              ) : null}
+            </View>
+
+            <View style={styles.badgeRow}>
+              {patient.status === "verified" ? (
+                <Badge label="Verified relationship" tone="success" />
+              ) : null}
+            </View>
+
+            <View style={styles.buttonWrapper}>
+              <Button
+                label={`Select ${patient.name}`}
+                variant="outline"
+                onPress={() => selectPatient(patient.patient_id)}
+                accessibilityLabel={`Select patient ${patient.name}`}
+              />
+            </View>
+          </AppCard>
+        ))}
+      </ScrollView>
     );
   }
 

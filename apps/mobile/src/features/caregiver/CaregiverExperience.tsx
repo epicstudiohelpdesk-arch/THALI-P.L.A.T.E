@@ -1,7 +1,6 @@
-import React, { useState, useContext } from "react";
+import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { QueryClientContext, QueryClientProvider } from "@tanstack/react-query";
 import { CaregiverProvider, useCaregiverContext } from "./context/CaregiverContext";
 import { CaregiverScreenHeader } from "./components/CaregiverScreenHeader";
 import { CaregiverBottomNav, type CaregiverTab } from "./components/CaregiverBottomNav";
@@ -9,7 +8,6 @@ import { CaregiverPatientSwitcher } from "./components/CaregiverPatientSwitcher"
 import { CaregiverHomeTab } from "./tabs/CaregiverHomeTab";
 import { CaregiverRecordTab } from "./tabs/CaregiverRecordTab";
 import { CaregiverYouTab } from "./tabs/CaregiverYouTab";
-import { queryClient } from "../../store/query";
 import { colors } from "../../theming/tokens";
 
 export type CaregiverExperienceProps = {
@@ -75,21 +73,11 @@ export function CaregiverExperience({
   onSignOut,
   testID = "caregiver-experience",
 }: CaregiverExperienceProps) {
-  const existingClient = useContext(QueryClientContext);
-
-  const content = (
+  return (
     <CaregiverProvider initialPatientId={initialPatientId}>
       <CaregiverShellContent onSignOut={onSignOut} testID={testID} />
     </CaregiverProvider>
   );
-
-  // If a QueryClientProvider is already present higher up in the tree (e.g. RootLayout),
-  // do not duplicate it; if absent (e.g. isolated test harness), inject the shared client.
-  if (existingClient) {
-    return content;
-  }
-
-  return <QueryClientProvider client={queryClient}>{content}</QueryClientProvider>;
 }
 
 const styles = StyleSheet.create({

@@ -29,14 +29,14 @@ export function CaregiverProvider({ children, initialPatientId }: CaregiverProvi
 
   // Active patient ID: derived state adhering to React 19 / Compiler purity rules.
   // Case A: zero patients or explicitly cleared -> null
-  // Case B: selected patient is still authorized -> selectedPatientId
-  // Case C: exactly one or multiple patients with no valid selection -> default to first authorized patient
+  // Case B: patient previously selected -> return ID if still authorized, otherwise null (never silently switch)
+  // Case C: initial load with no prior selection -> default to first authorized patient
   const activePatientId = useMemo(() => {
     if (isExplicitlyCleared || !patients || patients.length === 0) {
       return null;
     }
-    if (selectedPatientId && patients.some((p) => p.patient_id === selectedPatientId)) {
-      return selectedPatientId;
+    if (selectedPatientId) {
+      return patients.some((p) => p.patient_id === selectedPatientId) ? selectedPatientId : null;
     }
     return patients[0]?.patient_id ?? null;
   }, [patients, selectedPatientId, isExplicitlyCleared]);

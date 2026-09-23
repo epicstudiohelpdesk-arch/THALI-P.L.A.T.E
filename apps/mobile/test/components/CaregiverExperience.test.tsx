@@ -235,10 +235,64 @@ describe("CaregiverExperience Component Integration (Gate C1)", () => {
     expect(onSignOut).toHaveBeenCalledTimes(1);
   });
 
-  // TEST 7: 403 access lost in Record tab calls clearActivePatient, refreshPatients, and navigates back to Home
-  it("clears active patient, refetches list, and navigates back to Home on 403 access lost", async () => {
+  // SCENARIO 1: on 403 access lost for Patient A when Patient B remains authorized, returns to Home selection state without opening Patient B record or signing out
+  it("SCENARIO 1: on 403 access lost for Patient A when Patient B remains authorized, returns to Home selection state without opening Patient B record or signing out", async () => {
     mockListState.patients = [PATIENT_A, PATIENT_B];
-    renderExperience();
+    const onSignOut = jest.fn();
+    mockListState.refetch = jest.fn(async () => {
+      mockListState.patients = [PATIENT_B];
+    });
+
+    renderExperience({ onSignOut });
+
+    // Patient A is initially active
+    expect(screen.getAllByText("Aarav Sharma").length).toBeGreaterThanOrEqual(1);
+
+    // Navigate to Record tab for Patient A
+    const recordTabBtn = screen.getByLabelText("Patient health record tab");
+    await act(async () => {
+      fireEvent.press(recordTabBtn);
+    });
+
+    expect(screen.getByText("Glucose Screen for Aarav Sharma")).toBeTruthy();
+
+    // Trigger 403 access loss for Patient A
+    const accessLostBtn = screen.getByTestId("trigger-access-lost");
+    await act(async () => {
+      fireEvent.press(accessLostBtn);
+    });
+
+    // 1. Caregiver is NOT signed out
+    expect(onSignOut).not.toHaveBeenCalled();
+
+    // 2. Patient A Record is no longer visible
+    expect(screen.queryByText("Glucose Screen for Aarav Sharma")).toBeNull();
+
+    // 3. Caregiver returned to Home
+    expect(screen.getByText("THALI")).toBeTruthy();
+    expect(screen.getByText("Caregiver")).toBeTruthy();
+
+    // 4. UI does NOT say "No linked patients"
+    expect(screen.queryByText("No linked patients")).toBeNull();
+
+    // 5. Patient selection state is displayed with Patient B available for selection
+    expect(screen.getByText("Choose who you're caring for")).toBeTruthy();
+    expect(screen.getByText("Diya Sharma")).toBeTruthy();
+    expect(screen.getByText("Select Diya Sharma")).toBeTruthy();
+
+    // 6. Patient B clinical record is NOT automatically opened
+    expect(screen.queryByText("Glucose Screen for Diya Sharma")).toBeNull();
+  });
+
+  // SCENARIO 2: on 403 access lost for only authorized patient, returns to genuine No linked patients Home state without signing out
+  it("SCENARIO 2: on 403 access lost for only authorized patient, returns to genuine No linked patients Home state without signing out", async () => {
+    mockListState.patients = [PATIENT_A];
+    const onSignOut = jest.fn();
+    mockListState.refetch = jest.fn(async () => {
+      mockListState.patients = [];
+    });
+
+    renderExperience({ onSignOut });
 
     // Navigate to Record tab
     const recordTabBtn = screen.getByLabelText("Patient health record tab");
@@ -248,17 +302,63 @@ describe("CaregiverExperience Component Integration (Gate C1)", () => {
 
     expect(screen.getByText("Glucose Screen for Aarav Sharma")).toBeTruthy();
 
-    // Trigger access lost
+    // Trigger 403 access loss
     const accessLostBtn = screen.getByTestId("trigger-access-lost");
     await act(async () => {
       fireEvent.press(accessLostBtn);
     });
 
-    // 1. refetch called
-    expect(mockListState.refetch).toHaveBeenCalled();
-    // 2. Active patient was cleared, so back on Home tab it shows empty state
+    // 1. Caregiver is NOT signed out
+    expect(onSignOut).not.toHaveBeenCalled();
+
+    // 2. Record closed
+    expect(screen.queryByText("Glucose Screen for Aarav Sharma")).toBeNull();
+
+    // 3. Home displays genuine "No linked patients"
     expect(screen.getByText("No linked patients")).toBeTruthy();
-    expect(screen.getByText("Caregiver")).toBeTruthy();
+  });
+
+  // SCENARIO 3: caregiver explicitly selects Patient B after revocation and can then open Patient B record
+  it("SCENARIO 3: caregiver explicitly selects Patient B after revocation and can then open Patient B record", async () => {
+    mockListState.patients = [PATIENT_A, PATIENT_B];
+    mockListState.refetch = jest.fn(async () => {
+      mockListState.patients = [PATIENT_B];
+    });
+
+    renderExperience();
+
+    // Navigate to Record tab
+    const recordTabBtn = screen.getByLabelText("Patient health record tab");
+    await act(async () => {
+      fireEvent.press(recordTabBtn);
+    });
+
+    // Trigger 403 access loss on Patient A
+    const accessLostBtn = screen.getByTestId("trigger-access-lost");
+    await act(async () => {
+      fireEvent.press(accessLostBtn);
+    });
+
+    // We are on Home in selection state
+    expect(screen.getByText("Choose who you're caring for")).toBeTruthy();
+
+    // Explicitly select Patient B
+    const selectPatientBBtn = screen.getByText("Select Diya Sharma");
+    await act(async () => {
+      fireEvent.press(selectPatientBBtn);
+    });
+
+    // Patient B is now active
+    expect(screen.getByText("Caring for")).toBeTruthy();
+    expect(screen.getAllByText("Diya Sharma").length).toBeGreaterThanOrEqual(1);
+
+    // Now open Record for Patient B
+    const openRecordBtn = screen.getByText("Open Record");
+    await act(async () => {
+      fireEvent.press(openRecordBtn);
+    });
+
+    expect(screen.getByText("Glucose Screen for Diya Sharma")).toBeTruthy();
   });
 });
 

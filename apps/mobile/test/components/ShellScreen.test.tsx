@@ -1,6 +1,7 @@
 import React from "react";
 import { render, screen, fireEvent, act } from "@testing-library/react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ShellScreen from "../../app/(app)/shell";
 import type { Role } from "../../src/authz/roles";
 
@@ -74,9 +75,14 @@ const ALL_ROLES: Role[] = [
 ];
 
 function renderShell() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
     <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } }}>
-      <ShellScreen />
+      <QueryClientProvider client={queryClient}>
+        <ShellScreen />
+      </QueryClientProvider>
     </SafeAreaProvider>
   );
 }
