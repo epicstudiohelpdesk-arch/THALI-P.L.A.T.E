@@ -1,15 +1,21 @@
 import React from "react";
-import { render, screen } from "@testing-library/react-native";
-import AccessDeniedScreen from "../../app/(app)/access-denied";
+import { fireEvent, render, screen } from "@testing-library/react-native";
+import AccessDeniedScreen from "../../app/access-denied";
 
 let mockAuthState: { name: string; reason?: string } = { name: "access_denied", reason: "general" };
-let mockSignIn = jest.fn();
 let mockSignOut = jest.fn();
+const redirectHrefs: string[] = [];
+
+jest.mock("expo-router", () => ({
+  Redirect: ({ href }: { href: string }) => {
+    redirectHrefs.push(href);
+    return null;
+  },
+}));
 
 jest.mock("../../src/auth/AuthProvider", () => ({
   useAuth: () => ({
     state: mockAuthState,
-    signIn: mockSignIn,
     signOut: mockSignOut,
   }),
 }));
@@ -17,6 +23,7 @@ jest.mock("../../src/auth/AuthProvider", () => ({
 describe("AccessDeniedScreen (component-level a11y)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    redirectHrefs.length = 0;
     mockAuthState = { name: "access_denied", reason: "general" };
   });
 
@@ -43,11 +50,15 @@ describe("AccessDeniedScreen (component-level a11y)", () => {
     expect(screen.getByText(/deactivated/i)).toBeTruthy();
   });
 
-  it("renders retry and sign-out buttons", () => {
+  it("clears the denied session when returning to sign in", () => {
     render(<AccessDeniedScreen />);
-    const retryButton = screen.getByRole("button", { name: /try signing in again/i });
-    const signOutButton = screen.getByRole("button", { name: /sign out/i });
-    expect(retryButton).toBeTruthy();
-    expect(signOutButton).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: /back to sign in/i }));
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the denial page after sign out", () => {
+    mockAuthState = { name: "unauthenticated" };
+    render(<AccessDeniedScreen />);
+    expect(redirectHrefs).toContain("/(auth)/login");
   });
 });

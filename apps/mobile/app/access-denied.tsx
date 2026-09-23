@@ -1,18 +1,27 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Button } from "../../src/components/primitives/Button";
-import { useAuth } from "../../src/auth/AuthProvider";
-import { denialMessage } from "../../src/auth/denial";
-import { colors, spacing, typography } from "../../src/theming/tokens";
+import { Redirect } from "expo-router";
+import { Button } from "../src/components/primitives/Button";
+import { useAuth } from "../src/auth/AuthProvider";
+import { denialMessage } from "../src/auth/denial";
+import { colors, spacing, typography } from "../src/theming/tokens";
 
 /**
  * Safe denial screen for protected areas. 403 ≠ logout: the user stays
  * connected but is told exactly why access is denied (unlinked identity,
  * caregiver revoked/expired, facility mismatch, insufficient capability,
- * deactivated, unknown role).  Only "Sign out" or "Retry" are offered.
+ * deactivated, unknown role). The user can clear the session and sign in again.
  */
 export default function AccessDeniedScreen() {
-  const { state, signOut, signIn } = useAuth();
+  const { state, signOut } = useAuth();
+
+  if (state.name === "authenticated") {
+    return <Redirect href="/(app)/shell" />;
+  }
+
+  if (state.name !== "access_denied" && state.name !== "deactivated") {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   const reason =
     state.name === "access_denied"
@@ -30,13 +39,8 @@ export default function AccessDeniedScreen() {
         {denialMessage(reason)}
       </Text>
       <Button
-        label="Try signing in again"
+        label="Back to sign in"
         variant="outline"
-        onPress={() => void signIn()}
-      />
-      <Button
-        label="Sign out"
-        variant="ghost"
         onPress={() => void signOut()}
         accessibilityHint="Returns to the sign-in screen."
       />

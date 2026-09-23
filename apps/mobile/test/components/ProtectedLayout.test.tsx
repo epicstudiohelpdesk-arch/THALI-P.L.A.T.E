@@ -50,12 +50,12 @@ describe("ProtectedLayout guard", () => {
   it("redirects to access-denied on access_denied", () => {
     mockAuthState = { name: "access_denied" };
     render(<ProtectedLayout />);
-    expect(redirectHrefs).toContain("/(app)/access-denied");
+    expect(redirectHrefs).toContain("/access-denied");
   });
 
   it("redirects to access-denied on deactivated", () => {
     mockAuthState = { name: "deactivated" };
     render(<ProtectedLayout />);
-    expect(redirectHrefs).toContain("/(app)/access-denied");
+    expect(redirectHrefs).toContain("/access-denied");
   });
 });
