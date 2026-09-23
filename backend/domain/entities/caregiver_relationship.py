@@ -17,11 +17,19 @@ deny at authorization time even before the row is physically marked expired.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from uuid import UUID, uuid4
 
 from ..exceptions import InvalidRelationship, InvalidStateTransition
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 class CaregiverRelationshipStatus(str, Enum):
@@ -42,14 +50,21 @@ class CaregiverRelationship:
     verified_at: datetime | None = None
     revoked_at: datetime | None = None
     expires_at: datetime | None = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def __post_init__(self) -> None:
         if not isinstance(self.relationship, str) or not self.relationship.strip():
             raise InvalidRelationship("caregiver relationship label is required")
         if not isinstance(self.capabilities, frozenset):
             object.__setattr__(self, "capabilities", frozenset(self.capabilities or []))
+        self.verified_at = _as_utc(self.verified_at)
+        self.revoked_at = _as_utc(self.revoked_at)
+        self.expires_at = _as_utc(self.expires_at)
+        if self.created_at is not None:
+            self.created_at = _as_utc(self.created_at)
+        if self.updated_at is not None:
+            self.updated_at = _as_utc(self.updated_at)
 
     @property
     def active(self) -> bool:
@@ -74,8 +89,11 @@ class CaregiverRelationship:
         """
         if self.status is not CaregiverRelationshipStatus.VERIFIED:
             return False
-        if self.expires_at is not None and now >= self.expires_at:
-            return False
+        expires_at = _as_utc(self.expires_at)
+        if expires_at is not None:
+            now_utc = _as_utc(now) if now is not None else datetime.now(timezone.utc)
+            if now_utc >= expires_at:
+                return False
         return True
 
     def verify(self, verified_at: datetime | None = None) -> None:
@@ -84,15 +102,15 @@ class CaregiverRelationship:
                 f"cannot verify caregiver relationship in state {self.status.value}"
             )
         self.status = CaregiverRelationshipStatus.VERIFIED
-        self.verified_at = verified_at or datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        self.verified_at = _as_utc(verified_at) or datetime.now(timezone.utc)
+        self.updated_at = datetime.now(timezone.utc)
 
     def revoke(self) -> None:
         if self.status is CaregiverRelationshipStatus.REVOKED:
             raise InvalidRelationship("caregiver relationship is already revoked")
         self.status = CaregiverRelationshipStatus.REVOKED
-        self.revoked_at = datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        self.revoked_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(timezone.utc)
 
     def expire(self, expired_at: datetime | None = None) -> None:
         if self.status is CaregiverRelationshipStatus.REVOKED:
@@ -100,4 +118,4 @@ class CaregiverRelationship:
                 "cannot expire a revoked caregiver relationship"
             )
         self.status = CaregiverRelationshipStatus.EXPIRED
-        self.updated_at = expired_at or datetime.utcnow()
+        self.updated_at = _as_utc(expired_at) or datetime.now(timezone.utc)

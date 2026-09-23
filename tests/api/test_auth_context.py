@@ -14,6 +14,7 @@ Proves:
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -159,6 +160,86 @@ class TestAuthContextEndpoint:
         assert body["available_patient_contexts"][0]["patient_id"] == str(patient_id)
         assert body["available_patient_contexts"][0]["relationship"] == "Mother"
         assert "read_observations" in body["capabilities"]
+
+    def test_caregiver_with_naive_storage_expires_at(self, db_client):
+        """Simulates SQLite returning naive datetimes without raising offset comparison TypeError."""
+        client, db_session_factory = db_client
+        actor_id = uuid4()
+        tenant_id = uuid4()
+        patient_id = uuid4()
+
+        with SqlAlchemyUnitOfWork(db_session_factory, tenant_id) as uow:
+            pat = Patient(
+                id=patient_id,
+                facility_id=uuid4(),
+                uh_id=UHID("UH-PAT-EXP"),
+                name="Sita Sharma",
+                active=True,
+            )
+            naive_expires = datetime(2030, 1, 1, 0, 0, 0)
+            rel = CaregiverRelationship(
+                id=uuid4(),
+                patient_id=patient_id,
+                caregiver_user_id=actor_id,
+                relationship="Daughter",
+                status=CaregiverRelationshipStatus.VERIFIED,
+                capabilities=frozenset({"read_observations", "write_meal_observations"}),
+                expires_at=naive_expires,
+            )
+            uow.patients.add(pat)
+            uow.caregiver_relationships.add(rel)
+            uow.commit()
+
+        token = make_jwt(sub=str(actor_id), tenant_id=str(tenant_id), roles=["caregiver"])
+        resp = client.get("/api/v2/auth/context", headers=bearer(token))
+        assert resp.status_code == 200
+        body = resp.json()
+
+        assert body["actor_id"] == str(actor_id)
+        assert body["patient_id"] == str(patient_id)
+        assert body["onboarding_state"] == "ACTIVE"
+        assert len(body["available_patient_contexts"]) == 1
+        assert body["available_patient_contexts"][0]["patient_id"] == str(patient_id)
+        assert body["available_patient_contexts"][0]["relationship"] == "Daughter"
+        assert "read_observations" in body["capabilities"]
+
+    def test_caregiver_with_expired_naive_relationship_resolves_pending(self, db_client):
+        """Proves expired naive relationship does not grant active context."""
+        client, db_session_factory = db_client
+        actor_id = uuid4()
+        tenant_id = uuid4()
+        patient_id = uuid4()
+
+        with SqlAlchemyUnitOfWork(db_session_factory, tenant_id) as uow:
+            pat = Patient(
+                id=patient_id,
+                facility_id=uuid4(),
+                uh_id=UHID("UH-PAT-PAST"),
+                name="Past Patient",
+                active=True,
+            )
+            naive_past = datetime(2020, 1, 1, 0, 0, 0)
+            rel = CaregiverRelationship(
+                id=uuid4(),
+                patient_id=patient_id,
+                caregiver_user_id=actor_id,
+                relationship="Daughter",
+                status=CaregiverRelationshipStatus.VERIFIED,
+                capabilities=frozenset({"read_observations"}),
+                expires_at=naive_past,
+            )
+            uow.patients.add(pat)
+            uow.caregiver_relationships.add(rel)
+            uow.commit()
+
+        token = make_jwt(sub=str(actor_id), tenant_id=str(tenant_id), roles=["caregiver"])
+        resp = client.get("/api/v2/auth/context", headers=bearer(token))
+        assert resp.status_code == 200
+        body = resp.json()
+
+        assert body["patient_id"] is None
+        assert body["onboarding_state"] == "RELATIONSHIP_PENDING"
+        assert body["available_patient_contexts"] == []
 
     def test_caregiver_without_relationship_resolves_pending(self, client):
         actor_id = uuid4()
