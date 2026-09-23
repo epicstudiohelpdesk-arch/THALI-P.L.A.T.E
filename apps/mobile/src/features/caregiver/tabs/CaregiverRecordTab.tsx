@@ -17,7 +17,7 @@ export type CaregiverRecordTabProps = {
  * When access is lost (403), refetches authorized patients without logging out.
  */
 export function CaregiverRecordTab({ onBack, testID = "caregiver-record-tab" }: CaregiverRecordTabProps) {
-  const { activePatient, refreshPatients } = useCaregiverContext();
+  const { activePatient, clearActivePatient, refreshPatients } = useCaregiverContext();
 
   if (!activePatient) {
     return (
@@ -38,7 +38,9 @@ export function CaregiverRecordTab({ onBack, testID = "caregiver-record-tab" }: 
         patient={activePatient}
         onBack={onBack}
         onAccessLost={() => {
+          clearActivePatient();
           void refreshPatients();
+          onBack?.();
         }}
       />
     </View>

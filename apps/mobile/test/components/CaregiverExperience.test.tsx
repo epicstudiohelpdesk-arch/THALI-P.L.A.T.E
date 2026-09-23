@@ -1,7 +1,10 @@
 import React from "react";
 import { render, screen, fireEvent, act } from "@testing-library/react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Text, View, TouchableOpacity } from "react-native";
 import { CaregiverExperience } from "../../src/features/caregiver/CaregiverExperience";
+import { CaregiverProvider, useCaregiverContext } from "../../src/features/caregiver/context/CaregiverContext";
 import type { CaregiverPatientListItem } from "../../src/services/schemas/caregiver";
 
 let mockAuthState: {
@@ -58,11 +61,20 @@ jest.mock("../../src/features/caregiver/useCaregiverPatients", () => ({
 
 jest.mock("../../src/features/caregiver/CaregiverPatientGlucoseScreen", () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { Text, View } = require("react-native");
+  const { Text, View, TouchableOpacity } = require("react-native");
   return {
-    CaregiverPatientGlucoseScreen: ({ patient }: { patient: CaregiverPatientListItem }) => (
+    CaregiverPatientGlucoseScreen: ({
+      patient,
+      onAccessLost,
+    }: {
+      patient: CaregiverPatientListItem;
+      onAccessLost?: () => void;
+    }) => (
       <View testID="mocked-glucose-screen">
         <Text>Glucose Screen for {patient.name}</Text>
+        <TouchableOpacity testID="trigger-access-lost" onPress={onAccessLost}>
+          <Text>Simulate Access Lost</Text>
+        </TouchableOpacity>
       </View>
     ),
   };
@@ -89,6 +101,9 @@ const PATIENT_B: CaregiverPatientListItem = {
 };
 
 function renderExperience(props?: { onSignOut?: () => void }) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
     <SafeAreaProvider
       initialMetrics={{
@@ -96,7 +111,9 @@ function renderExperience(props?: { onSignOut?: () => void }) {
         insets: { top: 0, left: 0, right: 0, bottom: 0 },
       }}
     >
-      <CaregiverExperience {...props} />
+      <QueryClientProvider client={queryClient}>
+        <CaregiverExperience {...props} />
+      </QueryClientProvider>
     </SafeAreaProvider>
   );
 }
@@ -217,4 +234,183 @@ describe("CaregiverExperience Component Integration (Gate C1)", () => {
 
     expect(onSignOut).toHaveBeenCalledTimes(1);
   });
+
+  // TEST 7: 403 access lost in Record tab calls clearActivePatient, refreshPatients, and navigates back to Home
+  it("clears active patient, refetches list, and navigates back to Home on 403 access lost", async () => {
+    mockListState.patients = [PATIENT_A, PATIENT_B];
+    renderExperience();
+
+    // Navigate to Record tab
+    const recordTabBtn = screen.getByLabelText("Patient health record tab");
+    await act(async () => {
+      fireEvent.press(recordTabBtn);
+    });
+
+    expect(screen.getByText("Glucose Screen for Aarav Sharma")).toBeTruthy();
+
+    // Trigger access lost
+    const accessLostBtn = screen.getByTestId("trigger-access-lost");
+    await act(async () => {
+      fireEvent.press(accessLostBtn);
+    });
+
+    // 1. refetch called
+    expect(mockListState.refetch).toHaveBeenCalled();
+    // 2. Active patient was cleared, so back on Home tab it shows empty state
+    expect(screen.getByText("No linked patients")).toBeTruthy();
+    expect(screen.getByText("Caregiver")).toBeTruthy();
+  });
 });
+
+function ConsumerTestComponent() {
+  const {
+    activePatient,
+    activePatientId,
+    linkedPatients,
+    isLoading,
+    isError,
+    selectPatient,
+    clearActivePatient,
+    refreshPatients,
+  } = useCaregiverContext();
+
+  return (
+    <View testID="consumer-root">
+      <Text testID="active-patient-id">{activePatientId ?? "null"}</Text>
+      <Text testID="active-patient-name">{activePatient?.name ?? "null"}</Text>
+      <Text testID="patient-count">{linkedPatients.length.toString()}</Text>
+      <Text testID="loading-state">{isLoading ? "loading" : "idle"}</Text>
+      <Text testID="error-state">{isError ? "error" : "ok"}</Text>
+      <TouchableOpacity testID="btn-select-b" onPress={() => selectPatient("pat-2")}>
+        <Text>Select B</Text>
+      </TouchableOpacity>
+      <TouchableOpacity testID="btn-select-unknown" onPress={() => selectPatient("unknown-999")}>
+        <Text>Select Unknown</Text>
+      </TouchableOpacity>
+      <TouchableOpacity testID="btn-clear" onPress={clearActivePatient}>
+        <Text>Clear</Text>
+      </TouchableOpacity>
+      <TouchableOpacity testID="btn-refresh" onPress={() => void refreshPatients()}>
+        <Text>Refresh</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+describe("CaregiverProvider and useCaregiverContext Hook Integration", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockListState = {
+      patients: [],
+      patientCount: 0,
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    };
+  });
+
+  it("throws an error when useCaregiverContext is consumed outside CaregiverProvider", () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => {});
+    expect(() => render(<ConsumerTestComponent />)).toThrow(
+      "useCaregiverContext must be used within a CaregiverProvider"
+    );
+    spy.mockRestore();
+  });
+
+  it("initializes with null active patient when patient list is empty", () => {
+    mockListState.patients = [];
+    render(
+      <CaregiverProvider>
+        <ConsumerTestComponent />
+      </CaregiverProvider>
+    );
+
+    expect(screen.getByTestId("active-patient-id").props.children).toBe("null");
+    expect(screen.getByTestId("active-patient-name").props.children).toBe("null");
+    expect(screen.getByTestId("patient-count").props.children).toBe("0");
+  });
+
+  it("automatically activates single linked patient", () => {
+    mockListState.patients = [PATIENT_A];
+    render(
+      <CaregiverProvider>
+        <ConsumerTestComponent />
+      </CaregiverProvider>
+    );
+
+    expect(screen.getByTestId("active-patient-id").props.children).toBe("pat-1");
+    expect(screen.getByTestId("active-patient-name").props.children).toBe("Aarav Sharma");
+  });
+
+  it("defaults to first patient when multiple are present and updates on selectPatient", async () => {
+    mockListState.patients = [PATIENT_A, PATIENT_B];
+    render(
+      <CaregiverProvider>
+        <ConsumerTestComponent />
+      </CaregiverProvider>
+    );
+
+    expect(screen.getByTestId("active-patient-id").props.children).toBe("pat-1");
+
+    // Select Patient B
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("btn-select-b"));
+    });
+
+    expect(screen.getByTestId("active-patient-id").props.children).toBe("pat-2");
+    expect(screen.getByTestId("active-patient-name").props.children).toBe("Diya Sharma");
+  });
+
+  it("ignores unknown patient IDs not in linked list", async () => {
+    mockListState.patients = [PATIENT_A, PATIENT_B];
+    render(
+      <CaregiverProvider>
+        <ConsumerTestComponent />
+      </CaregiverProvider>
+    );
+
+    expect(screen.getByTestId("active-patient-id").props.children).toBe("pat-1");
+
+    // Attempt to select unknown
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("btn-select-unknown"));
+    });
+
+    // Stays pat-1
+    expect(screen.getByTestId("active-patient-id").props.children).toBe("pat-1");
+  });
+
+  it("clears active patient when clearActivePatient is called", async () => {
+    mockListState.patients = [PATIENT_A];
+    render(
+      <CaregiverProvider>
+        <ConsumerTestComponent />
+      </CaregiverProvider>
+    );
+
+    expect(screen.getByTestId("active-patient-id").props.children).toBe("pat-1");
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("btn-clear"));
+    });
+
+    expect(screen.getByTestId("active-patient-id").props.children).toBe("null");
+    expect(screen.getByTestId("active-patient-name").props.children).toBe("null");
+  });
+
+  it("triggers refetch when refreshPatients is called", async () => {
+    mockListState.patients = [PATIENT_A];
+    render(
+      <CaregiverProvider>
+        <ConsumerTestComponent />
+      </CaregiverProvider>
+    );
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("btn-refresh"));
+    });
+
+    expect(mockListState.refetch).toHaveBeenCalled();
+  });
+});
+
