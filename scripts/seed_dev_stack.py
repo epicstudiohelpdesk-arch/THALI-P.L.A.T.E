@@ -33,6 +33,7 @@ DEV_ADMIN_ID = UUID("10000000-0000-0000-0000-000000000001")
 DEV_DOCTOR_ID = UUID("10000000-0000-0000-0000-000000000002")
 DEV_NURSE_ID = UUID("10000000-0000-0000-0000-000000000003")
 DEV_PATIENT_USER_ID = UUID("10000000-0000-0000-0000-000000000004")
+DEV_CAREGIVER_USER_ID = UUID("10000000-0000-0000-0000-000000000005")
 
 
 def seed() -> None:
@@ -46,6 +47,8 @@ def seed() -> None:
 
     from backend.infrastructure.auth.password_service import hash_password
     from backend.infrastructure.persistence.models import (
+        Base,
+        CaregiverRelationshipModel,
         CareTeamMemberModel,
         FacilityModel,
         IdentityPatientMappingModel,
@@ -55,6 +58,7 @@ def seed() -> None:
     )
 
     engine = create_engine(DATABASE_URL)
+    Base.metadata.create_all(engine)
     now = datetime.now(timezone.utc)
 
     with Session(engine) as session:
@@ -141,6 +145,13 @@ def seed() -> None:
                 "role": "patient",
                 "facility_id": facility_id,
             },
+            {
+                "id": DEV_CAREGIVER_USER_ID,
+                "email": "caregiver@thali.local",
+                "password": "caregiver-change-me-2026",
+                "role": "caregiver",
+                "facility_id": facility_id,
+            },
         ]
 
         seeded_user_map: dict[str, UserModel] = {}
@@ -212,6 +223,36 @@ def seed() -> None:
                 print(f"  Linked user {patient_user.email} to patient {pat.name}")
 
         # ------------------------------------------------------------------
+        # 5b. Caregiver Relationship (links user caregiver@thali.local to Sita)
+        # ------------------------------------------------------------------
+        caregiver_user = seeded_user_map.get("caregiver@thali.local")
+        if caregiver_user:
+            rel = session.query(CaregiverRelationshipModel).filter_by(
+                tenant_id=tenant_id,
+                caregiver_user_id=caregiver_user.id,
+                patient_id=pat.id,
+            ).first()
+            if not rel:
+                from datetime import timedelta
+                rel = CaregiverRelationshipModel(
+                    id=uuid.uuid4(),
+                    tenant_id=tenant_id,
+                    caregiver_user_id=caregiver_user.id,
+                    patient_id=pat.id,
+                    relationship_label="Daughter",
+                    status="verified",
+                    capabilities=["read_glucose", "create_glucose", "read_meal", "create_meal"],
+                    verified_at=now,
+                    expires_at=now + timedelta(days=365),
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(rel)
+                print(f"  Linked caregiver {caregiver_user.email} to patient {pat.name}")
+            else:
+                print(f"  Caregiver relationship already exists for {pat.name}")
+
+        # ------------------------------------------------------------------
         # 6. Care Team Member (Doctor)
         # ------------------------------------------------------------------
         doctor_user = seeded_user_map.get("doctor@thali.local")
@@ -239,10 +280,11 @@ def seed() -> None:
     print("Seed complete.")
     print()
     print("Default credentials:")
-    print(f"  admin@thali.local   /  {ADMIN_PASSWORD}")
-    print("  doctor@thali.local  /  doctor-change-me-2026")
-    print("  nurse@thali.local   /  nurse-change-me-2026")
-    print("  patient@thali.local /  patient-change-me-2026")
+    print(f"  admin@thali.local     /  {ADMIN_PASSWORD}")
+    print("  doctor@thali.local    /  doctor-change-me-2026")
+    print("  nurse@thali.local     /  nurse-change-me-2026")
+    print("  patient@thali.local   /  patient-change-me-2026")
+    print("  caregiver@thali.local /  caregiver-change-me-2026")
 
 
 if __name__ == "__main__":
