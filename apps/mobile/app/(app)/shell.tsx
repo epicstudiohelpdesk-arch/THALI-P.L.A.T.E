@@ -7,7 +7,7 @@ import { useAuth } from "../../src/auth/AuthProvider";
 import { roleLabel, type Role } from "../../src/authz/roles";
 import { colors, spacing, typography } from "../../src/theming/tokens";
 import { LoadingState } from "../../src/components/primitives/LoadingState";
-import { CaregiverWorkflow, CaregiverReconciliationScreen } from "../../src/features/caregiver";
+import { CaregiverExperience } from "../../src/features/caregiver";
 import { DoctorWorkstation } from "../../src/features/doctor";
 import { DietitianWorkflow } from "../../src/features/meals";
 import { FHWWorkflow, CoordinatorWorkflow } from "../../src/features/tasks";
@@ -46,12 +46,8 @@ export default function ShellScreen() {
     );
   }
 
-  if (role === "Caregiver" && (selectedDestination === "patients" || selectedDestination === "home")) {
-    return <CaregiverWorkflow onExit={() => setSelectedDestination(null)} />;
-  }
-
-  if (role === "Caregiver" && selectedDestination === "verify") {
-    return <CaregiverReconciliationScreen onBack={() => setSelectedDestination(null)} />;
+  if (role === "Caregiver") {
+    return <CaregiverExperience onSignOut={signOut} />;
   }
 
   // Doctor / Clinician Workstation (Gate 10F-M / P.L.A.T.E. Clinical Workspace)

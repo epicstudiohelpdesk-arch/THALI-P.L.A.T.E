@@ -34,7 +34,7 @@ export default function LoginScreen() {
   }
 
   if (state.name === "access_denied" || state.name === "deactivated") {
-    return <Redirect href="/(app)/access-denied" />;
+    return <Redirect href="/access-denied" />;
   }
 
   const busy = isBootstrapping || state.name === "authenticating";
@@ -43,10 +43,6 @@ export default function LoginScreen() {
     setLocalError(null);
     const cleanEmail = email.trim();
 
-    if (!cleanEmail && !password) {
-      await signIn();
-      return;
-    }
     if (!cleanEmail) {
       setLocalError("Please enter your email address.");
       return;

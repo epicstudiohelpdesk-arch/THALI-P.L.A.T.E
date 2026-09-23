@@ -17,7 +17,7 @@ export default function ProtectedLayout() {
 
     case "access_denied":
     case "deactivated":
-      return <Redirect href="/(app)/access-denied" />;
+      return <Redirect href="/access-denied" />;
 
     case "unknown":
     case "bootstrapping":

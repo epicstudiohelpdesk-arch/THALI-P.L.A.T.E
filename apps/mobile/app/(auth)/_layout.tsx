@@ -16,7 +16,7 @@ export default function AuthLayout() {
   }
 
   if (state.name === "access_denied" || state.name === "deactivated") {
-    return <Redirect href="/(app)/access-denied" />;
+    return <Redirect href="/access-denied" />;
   }
 
   return (

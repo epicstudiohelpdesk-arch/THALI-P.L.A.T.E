@@ -74,11 +74,12 @@ describe("LoginScreen (component-level a11y)", () => {
     expect(alert.props.accessibilityLabel).toMatch(/session expired/i);
   });
 
-  it("calls signIn when the button is pressed", () => {
+  it("asks for an email instead of starting browser sign-in on an empty form", () => {
     render(<LoginScreen />);
     const button = screen.getByRole("button");
     fireEvent.press(button);
-    expect(mockSignIn).toHaveBeenCalledTimes(1);
+    expect(mockSignIn).not.toHaveBeenCalled();
+    expect(screen.getByText(/please enter your email address/i)).toBeTruthy();
   });
 
   it("does not render clinic enrollment guidance", () => {

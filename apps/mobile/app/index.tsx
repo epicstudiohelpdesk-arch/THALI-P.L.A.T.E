@@ -40,7 +40,7 @@ function AuthDrivenIndex() {
 
     case "access_denied":
     case "deactivated":
-      return <Redirect href="/(app)/access-denied" />;
+      return <Redirect href="/access-denied" />;
 
     case "session_expiring":
     case "refreshing":
